@@ -1,6 +1,6 @@
 ﻿# MockController Client Library
 
-Библиотека для подключения любой Spring Boot заглушки к MockController для централизованного управления конфигурацией.
+Библиотека для подключения любой Spring Boot заглушки к [MockController](https://github.com/Diavolos88/mocController) для централизованного управления конфигурацией.
 
 ## Описание
 
@@ -44,6 +44,7 @@ spring:
     name: your-service-name  # Имя вашей заглушки
 
 # Конфигурация MockController
+# MockController: https://github.com/Diavolos88/mocController
 mock-controller:
   url: http://localhost:8080  # URL вашего MockController
   check-interval-seconds: 5   # Интервал проверки обновлений (в секундах)
@@ -224,4 +225,5 @@ public class ComplexMockService extends MockControllerClientBase {
 
 ## Дополнительная информация
 
-Подробная документация по использованию библиотеки находится в [docs/USAGE.md](docs/USAGE.md).
+- Подробная документация по использованию библиотеки находится в [docs/USAGE.md](docs/USAGE.md)
+- Репозиторий MockController: [https://github.com/Diavolos88/mocController](https://github.com/Diavolos88/mocController)
