@@ -1,5 +1,6 @@
 package com.mock.service;
 
+import com.mock.config.MockControllerClientBase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -7,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
-public class MockService {
+public class MockService extends MockControllerClientBase {
     
     // Параметры для Hello World эндпоинта
     private long delayHelloWorld = 1000; // задержка в миллисекундах

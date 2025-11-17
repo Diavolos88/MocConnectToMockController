@@ -14,17 +14,13 @@
 
 Библиотека состоит из следующих компонентов:
 
-### MockConfigExtractor
-Извлекает конфигурацию из вашего сервиса через рефлексию:
-- Находит все поля, начинающиеся с `delay` (числовые задержки)
-- Находит все поля, начинающиеся с `string` (строковые параметры)
-- Формирует структуру конфигурации для отправки в MockController
-
-### MockControllerClient
-Управляет взаимодействием с MockController:
+### MockControllerClientBase
+Базовый класс, от которого наследуется ваш сервис. Содержит всю логику работы с MockController:
+- Автоматически извлекает конфигурацию из текущего объекта через рефлексию
 - Отправляет конфигурацию при старте приложения
 - Периодически проверяет наличие обновлений
-- Загружает и применяет обновленную конфигурацию
+- Загружает и применяет обновленную конфигурацию к текущему объекту
+- Управляет уровнем логирования
 
 ### AppConfig
 Читает `spring.application.name` из конфигурации для идентификации заглушки.
@@ -45,8 +41,7 @@
 src/main/java/com/mock/config/
 ├── AppConfig.java
 ├── LoggingConfig.java
-├── MockConfigExtractor.java
-├── MockControllerClient.java
+├── MockControllerClientBase.java
 └── MockControllerConfig.java
 ```
 
@@ -87,6 +82,20 @@ public class YourApplication {
 
 ## Создание конфигурируемого сервиса
 
+### Наследование от MockControllerClientBase
+
+Ваш сервис должен наследоваться от `MockControllerClientBase` и быть помечен аннотацией `@Service`:
+
+```java
+import com.mock.config.MockControllerClientBase;
+import org.springframework.stereotype.Service;
+
+@Service
+public class YourService extends MockControllerClientBase {
+    // Ваши поля и методы
+}
+```
+
 ### Правила именования полей
 
 Библиотека автоматически извлекает поля по следующим правилам:
@@ -108,8 +117,11 @@ public class YourApplication {
 ### Пример сервиса
 
 ```java
+import com.mock.config.MockControllerClientBase;
+import org.springframework.stereotype.Service;
+
 @Service
-public class PaymentMockService {
+public class PaymentMockService extends MockControllerClientBase {
     
     // Delays - будут автоматически извлекаться
     private long delayPaymentProcessing = 1500;
@@ -139,6 +151,7 @@ public class PaymentMockService {
         }
         
         // Используем stringPaymentStatus и stringErrorCode
+        // Все параметры автоматически синхронизируются с MockController!
         return PaymentResponse.builder()
             .status(stringPaymentStatus)
             .errorCode(stringErrorCode)

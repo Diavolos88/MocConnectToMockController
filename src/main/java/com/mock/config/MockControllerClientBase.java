@@ -2,7 +2,6 @@ package com.mock.config;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
-import com.mock.service.MockService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,38 +13,34 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.lang.reflect.Field;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Клиент для работы с MockController API.
- * Вызывает checkUpdate при инициализации приложения.
+ * Базовый класс для сервисов, которые хотят подключиться к MockController.
+ * Наследуйтесь от этого класса, чтобы автоматически получить функциональность
+ * синхронизации конфигурации с MockController.
+ * 
+ * Каждый наследник должен быть помечен аннотацией @Service.
  */
-@Component
-public class MockControllerClient {
+public class MockControllerClientBase {
     
-    private static final Logger logger = LoggerFactory.getLogger(MockControllerClient.class);
-    
-    private final MockControllerConfig mockControllerConfig;
-    private final MockConfigExtractor configExtractor;
-    private final MockService mockService;
-    private final LoggingConfig loggingConfig;
-    private final RestTemplate restTemplate;
+    private static final Logger logger = LoggerFactory.getLogger(MockControllerClientBase.class);
     
     @Autowired
-    public MockControllerClient(MockControllerConfig mockControllerConfig, 
-                                MockConfigExtractor configExtractor,
-                                MockService mockService,
-                                LoggingConfig loggingConfig) {
-        this.mockControllerConfig = mockControllerConfig;
-        this.configExtractor = configExtractor;
-        this.mockService = mockService;
-        this.loggingConfig = loggingConfig;
-        this.restTemplate = new RestTemplate();
-    }
+    private MockControllerConfig mockControllerConfig;
+    
+    @Autowired
+    private AppConfig appConfig;
+    
+    @Autowired
+    private LoggingConfig loggingConfig;
+    
+    private final RestTemplate restTemplate = new RestTemplate();
+    private String version = "v1";
     
     /**
      * Вызывается при готовности приложения.
@@ -62,10 +57,15 @@ public class MockControllerClient {
      */
     public void checkUpdate() {
         try {
+            if (mockControllerConfig == null || appConfig == null || loggingConfig == null) {
+                logger.warn("MockController dependencies not initialized, skipping checkUpdate");
+                return;
+            }
+            
             String url = mockControllerConfig.getUrl() + "/api/configs/checkUpdate";
             
             // Формируем запрос
-            Map<String, Object> requestBody = configExtractor.buildCheckUpdateRequest();
+            Map<String, Object> requestBody = buildCheckUpdateRequest();
             
             // Настраиваем заголовки
             HttpHeaders headers = new HttpHeaders();
@@ -86,7 +86,7 @@ public class MockControllerClient {
             if (responseBody != null) {
                 // Обновляем версию из ответа
                 if (responseBody.getCurrentVersion() != null) {
-                    configExtractor.setVersion(responseBody.getCurrentVersion());
+                    this.version = responseBody.getCurrentVersion();
                 }
                 
                 // Если требуется обновление, загружаем и применяем новый конфиг
@@ -113,13 +113,18 @@ public class MockControllerClient {
     }
     
     /**
-     * Загружает конфигурацию из MockController по версии и применяет её к MockService.
+     * Загружает конфигурацию из MockController по версии и применяет её к текущему объекту.
      * 
      * @param version версия конфига для загрузки
      */
     private void loadAndApplyConfig(String version) {
         try {
-            String systemName = configExtractor.getSystemName();
+            if (mockControllerConfig == null || appConfig == null) {
+                logger.warn("MockController dependencies not initialized, cannot load config");
+                return;
+            }
+            
+            String systemName = appConfig.getName();
             String url = mockControllerConfig.getUrl() + "/api/configs/" + systemName + "?version=" + version;
             
             // Отправляем GET запрос
@@ -133,11 +138,11 @@ public class MockControllerClient {
             ConfigResponse configResponse = response.getBody();
             
             if (configResponse != null && configResponse.getConfig() != null) {
-                // Применяем конфиг к MockService
+                // Применяем конфиг к текущему объекту
                 applyConfig(configResponse.getConfig());
                 
                 // Обновляем версию
-                configExtractor.setVersion(configResponse.getVersion());
+                this.version = configResponse.getVersion();
                 logger.info("Config applied successfully, version: {}", configResponse.getVersion());
             } else {
                 logger.warn("Empty response received when loading config");
@@ -149,7 +154,7 @@ public class MockControllerClient {
     }
     
     /**
-     * Применяет конфигурацию к MockService через рефлексию.
+     * Применяет конфигурацию к текущему объекту через рефлексию.
      * Обновляет все поля, начинающиеся с "delay" и "string".
      * 
      * @param config конфигурация из MockController
@@ -157,7 +162,7 @@ public class MockControllerClient {
     @SuppressWarnings("unchecked")
     private void applyConfig(Map<String, Object> config) {
         try {
-            Class<?> clazz = mockService.getClass();
+            Class<?> clazz = this.getClass();
             Field[] fields = clazz.getDeclaredFields();
             
             // Применяем delays
@@ -172,9 +177,9 @@ public class MockControllerClient {
                         field.setAccessible(true);
                         String stringValue = String.valueOf(entry.getValue());
                         Object value = parseValue(field.getType(), stringValue);
-                        field.set(mockService, value);
+                        field.set(this, value);
                     } else {
-                        logger.warn("Field {} not found in MockService, skipping", fieldName);
+                        logger.warn("Field {} not found in {}, skipping", fieldName, clazz.getSimpleName());
                     }
                 }
             }
@@ -190,9 +195,9 @@ public class MockControllerClient {
                     if (field != null) {
                         field.setAccessible(true);
                         String stringValue = String.valueOf(entry.getValue());
-                        field.set(mockService, stringValue);
+                        field.set(this, stringValue);
                     } else {
-                        logger.warn("Field {} not found in MockService, skipping", fieldName);
+                        logger.warn("Field {} not found in {}, skipping", fieldName, clazz.getSimpleName());
                     }
                 }
             }
@@ -201,12 +206,87 @@ public class MockControllerClient {
             if (config.containsKey("loggingLv")) {
                 String loggingLv = String.valueOf(config.get("loggingLv"));
                 applyLoggingLevel(loggingLv);
-                loggingConfig.setComMock(loggingLv);
+                loggingConfig.setLoggingLevel(loggingLv);
             }
             
         } catch (Exception e) {
-            logger.error("Error applying config to MockService: {}", e.getMessage(), e);
+            logger.error("Error applying config to {}: {}", this.getClass().getSimpleName(), e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Извлекает все поля, начинающиеся с "delay" из текущего объекта через рефлексию.
+     */
+    private Map<String, String> extractDelays() {
+        Map<String, String> delays = new HashMap<>();
+        
+        try {
+            Class<?> clazz = this.getClass();
+            Field[] fields = clazz.getDeclaredFields();
+            
+            for (Field field : fields) {
+                if (field.getName().startsWith("delay")) {
+                    field.setAccessible(true);
+                    Object value = field.get(this);
+                    delays.put(field.getName(), String.valueOf(value));
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Error extracting delays from " + this.getClass().getSimpleName(), e);
+        }
+        
+        return delays;
+    }
+    
+    /**
+     * Извлекает все поля, начинающиеся с "string" из текущего объекта через рефлексию.
+     */
+    private Map<String, String> extractStringParams() {
+        Map<String, String> stringParams = new HashMap<>();
+        
+        try {
+            Class<?> clazz = this.getClass();
+            Field[] fields = clazz.getDeclaredFields();
+            
+            for (Field field : fields) {
+                if (field.getName().startsWith("string")) {
+                    field.setAccessible(true);
+                    Object value = field.get(this);
+                    stringParams.put(field.getName(), String.valueOf(value));
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Error extracting stringParams from " + this.getClass().getSimpleName(), e);
+        }
+        
+        return stringParams;
+    }
+    
+    /**
+     * Формирует полный конфиг для отправки в MockController.
+     */
+    private Map<String, Object> buildConfig() {
+        Map<String, Object> config = new HashMap<>();
+        
+        Map<String, String> delays = extractDelays();
+        Map<String, String> stringParams = extractStringParams();
+        
+        config.put("delays", delays);
+        config.put("stringParams", stringParams);
+        config.put("loggingLv", loggingConfig.getLoggingLevel());
+        
+        return config;
+    }
+    
+    /**
+     * Формирует полный запрос для отправки в MockController (checkUpdate).
+     */
+    private Map<String, Object> buildCheckUpdateRequest() {
+        Map<String, Object> request = new HashMap<>();
+        request.put("SystemName", appConfig.getName());
+        request.put("version", version);
+        request.put("config", buildConfig());
+        return request;
     }
     
     /**
@@ -220,7 +300,6 @@ public class MockControllerClient {
         }
         return null;
     }
-    
     
     /**
      * Парсит значение в зависимости от типа поля.
@@ -237,14 +316,15 @@ public class MockControllerClient {
     }
     
     /**
-     * Применяет уровень логирования к пакету com.mock.
+     * Применяет уровень логирования к пакету, указанному в LoggingConfig.
      * 
      * @param levelStr уровень логирования (ERROR, WARN, INFO, DEBUG)
      */
     private void applyLoggingLevel(String levelStr) {
         try {
             LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-            ch.qos.logback.classic.Logger rootLogger = loggerContext.getLogger("com.mock");
+            // Используем пакет текущего класса для применения уровня логирования
+            ch.qos.logback.classic.Logger rootLogger = loggerContext.getLogger(this.getClass().getPackage().getName());
             
             Level level;
             switch (levelStr.toUpperCase()) {

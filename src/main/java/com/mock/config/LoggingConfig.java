@@ -7,14 +7,30 @@ import org.springframework.context.annotation.Configuration;
 public class LoggingConfig {
     
     @Value("${logging.level.com.mock:INFO}")
-    private String comMock = "INFO";
+    private String loggingLevel = "INFO";
     
-    public String getComMock() {
-        return comMock;
+    public String getLoggingLevel() {
+        return loggingLevel;
     }
     
+    public void setLoggingLevel(String loggingLevel) {
+        this.loggingLevel = loggingLevel;
+    }
+    
+    /**
+     * @deprecated Используйте getLoggingLevel()
+     */
+    @Deprecated
+    public String getComMock() {
+        return loggingLevel;
+    }
+    
+    /**
+     * @deprecated Используйте setLoggingLevel()
+     */
+    @Deprecated
     public void setComMock(String comMock) {
-        this.comMock = comMock;
+        this.loggingLevel = comMock;
     }
 }
 

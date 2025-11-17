@@ -67,19 +67,22 @@ public class YourApplication {
 }
 ```
 
-### 5. Создайте сервис с конфигурируемыми параметрами
+### 5. Создайте сервис, наследующийся от MockControllerClientBase
 
-В вашем сервисе создайте поля, которые начинаются с `delay` (для числовых задержек) и `string` (для строковых параметров):
+Ваш сервис должен наследоваться от `MockControllerClientBase` и быть помечен аннотацией `@Service`:
 
 ```java
+import com.mock.config.MockControllerClientBase;
+import org.springframework.stereotype.Service;
+
 @Service
-public class YourService {
+public class YourService extends MockControllerClientBase {
     
-    // Параметры с префиксом "delay" - будут в delays
+    // Параметры с префиксом "delay" - будут автоматически извлекаться
     private long delayResponse = 1000;
     private long delayProcessing = 500;
     
-    // Параметры с префиксом "string" - будут в stringParams
+    // Параметры с префиксом "string" - будут автоматически извлекаться
     private String stringMode = "normal";
     private String stringStatus = "active";
     
@@ -89,18 +92,12 @@ public class YourService {
     // Ваша бизнес-логика
     public void doSomething() {
         // Используйте delayResponse, stringMode и т.д.
+        // Все изменения из MockController применяются автоматически!
     }
 }
 ```
 
-### 6. Инжектируйте зависимости
-
-Библиотека автоматически создаст необходимые компоненты через Spring DI. Убедитесь, что ваш сервис доступен для инжекции:
-
-```java
-@Autowired
-private YourService yourService;
-```
+**Важно:** Просто наследуйтесь от `MockControllerClientBase` - все остальное работает автоматически!
 
 ## Как это работает
 
@@ -151,8 +148,11 @@ private YourService yourService;
 ### Пример 1: Простая заглушка с задержками
 
 ```java
+import com.mock.config.MockControllerClientBase;
+import org.springframework.stereotype.Service;
+
 @Service
-public class SimpleMockService {
+public class SimpleMockService extends MockControllerClientBase {
     private long delayApiCall = 2000;
     private String stringResponse = "Success";
     
@@ -170,8 +170,11 @@ public class SimpleMockService {
 ### Пример 2: Заглушка с несколькими параметрами
 
 ```java
+import com.mock.config.MockControllerClientBase;
+import org.springframework.stereotype.Service;
+
 @Service
-public class ComplexMockService {
+public class ComplexMockService extends MockControllerClientBase {
     // Delays
     private long delayLogin = 1000;
     private long delayLogout = 500;
@@ -184,6 +187,7 @@ public class ComplexMockService {
     
     public AuthResponse login(String username) {
         // Используйте delayLogin и stringAuthMode
+        // Все параметры автоматически синхронизируются с MockController!
     }
 }
 ```
