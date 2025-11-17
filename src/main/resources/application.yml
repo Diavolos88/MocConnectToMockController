@@ -1,0 +1,27 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: test-mock
+
+# Конфигурация MockController
+mock-controller:
+  url: http://localhost:8080
+  check-interval-seconds: 5  # Интервал проверки обновлений в секундах
+
+# Параметры заглушки
+mock:
+  hello:
+    delay-ms: 1000
+    response: "Hello World!"
+  health:
+    delay-ms: 500
+    response: "OK"
+
+# Логирование
+logging:
+  level:
+    com.mock: INFO
+    org.springframework: INFO
+
