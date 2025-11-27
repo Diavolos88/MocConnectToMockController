@@ -16,21 +16,5 @@ public class LoggingConfig {
     public void setLoggingLevel(String loggingLevel) {
         this.loggingLevel = loggingLevel;
     }
-    
-    /**
-     * @deprecated Используйте getLoggingLevel()
-     */
-    @Deprecated
-    public String getComMock() {
-        return loggingLevel;
-    }
-    
-    /**
-     * @deprecated Используйте setLoggingLevel()
-     */
-    @Deprecated
-    public void setComMock(String comMock) {
-        this.loggingLevel = comMock;
-    }
 }
 

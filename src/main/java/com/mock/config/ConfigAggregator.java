@@ -104,99 +104,56 @@ public class ConfigAggregator {
     }
     
     /**
-     * Извлекает все поля, начинающиеся с "delay" из сервиса.
+     * Универсальный метод для извлечения полей с заданным префиксом из сервиса.
      */
-    private Map<String, String> extractDelays(MockControllerClientBase service) {
-        Map<String, String> delays = new HashMap<>();
+    private Map<String, String> extractFieldsByPrefix(MockControllerClientBase service, String prefix) {
+        Map<String, String> result = new HashMap<>();
         
         try {
             Class<?> clazz = service.getClass();
             Field[] fields = clazz.getDeclaredFields();
             
             for (Field field : fields) {
-                if (field.getName().startsWith("delay")) {
+                if (field.getName().startsWith(prefix)) {
                     field.setAccessible(true);
                     Object value = field.get(service);
-                    delays.put(field.getName(), String.valueOf(value));
+                    result.put(field.getName(), String.valueOf(value));
                 }
             }
         } catch (IllegalAccessException e) {
-            logger.error("Error extracting delays from {}: {}", service.getClass().getSimpleName(), e.getMessage());
+            logger.error("Error extracting fields with prefix '{}' from {}: {}", 
+                prefix, service.getClass().getSimpleName(), e.getMessage());
         }
         
-        return delays;
+        return result;
+    }
+    
+    /**
+     * Извлекает все поля, начинающиеся с "delay" из сервиса.
+     */
+    private Map<String, String> extractDelays(MockControllerClientBase service) {
+        return extractFieldsByPrefix(service, "delay");
     }
     
     /**
      * Извлекает все поля, начинающиеся с "int" из сервиса.
      */
     private Map<String, String> extractIntParams(MockControllerClientBase service) {
-        Map<String, String> intParams = new HashMap<>();
-        
-        try {
-            Class<?> clazz = service.getClass();
-            Field[] fields = clazz.getDeclaredFields();
-            
-            for (Field field : fields) {
-                if (field.getName().startsWith("int")) {
-                    field.setAccessible(true);
-                    Object value = field.get(service);
-                    intParams.put(field.getName(), String.valueOf(value));
-                }
-            }
-        } catch (IllegalAccessException e) {
-            logger.error("Error extracting intParams from {}: {}", service.getClass().getSimpleName(), e.getMessage());
-        }
-        
-        return intParams;
+        return extractFieldsByPrefix(service, "int");
     }
     
     /**
      * Извлекает все поля, начинающиеся с "string" из сервиса.
      */
     private Map<String, String> extractStringParams(MockControllerClientBase service) {
-        Map<String, String> stringParams = new HashMap<>();
-        
-        try {
-            Class<?> clazz = service.getClass();
-            Field[] fields = clazz.getDeclaredFields();
-            
-            for (Field field : fields) {
-                if (field.getName().startsWith("string")) {
-                    field.setAccessible(true);
-                    Object value = field.get(service);
-                    stringParams.put(field.getName(), String.valueOf(value));
-                }
-            }
-        } catch (IllegalAccessException e) {
-            logger.error("Error extracting stringParams from {}: {}", service.getClass().getSimpleName(), e.getMessage());
-        }
-        
-        return stringParams;
+        return extractFieldsByPrefix(service, "string");
     }
     
     /**
      * Извлекает все поля, начинающиеся с "is" из сервиса.
      */
     private Map<String, String> extractBooleanVariables(MockControllerClientBase service) {
-        Map<String, String> booleanVariables = new HashMap<>();
-        
-        try {
-            Class<?> clazz = service.getClass();
-            Field[] fields = clazz.getDeclaredFields();
-            
-            for (Field field : fields) {
-                if (field.getName().startsWith("is")) {
-                    field.setAccessible(true);
-                    Object value = field.get(service);
-                    booleanVariables.put(field.getName(), String.valueOf(value));
-                }
-            }
-        } catch (IllegalAccessException e) {
-            logger.error("Error extracting booleanVariables from {}: {}", service.getClass().getSimpleName(), e.getMessage());
-        }
-        
-        return booleanVariables;
+        return extractFieldsByPrefix(service, "is");
     }
     
     /**
@@ -240,13 +197,7 @@ public class ConfigAggregator {
             // Применяем stringParams
             if (config.containsKey("stringParams")) {
                 Map<String, Object> stringParams = (Map<String, Object>) config.get("stringParams");
-                for (Map.Entry<String, Object> entry : stringParams.entrySet()) {
-                    Field field = findField(fields, entry.getKey());
-                    if (field != null) {
-                        field.setAccessible(true);
-                        field.set(service, String.valueOf(entry.getValue()));
-                    }
-                }
+                applyStringFields(service, fields, stringParams);
             }
             
         } catch (Exception e) {
@@ -255,7 +206,7 @@ public class ConfigAggregator {
     }
     
     /**
-     * Применяет поля к сервису (для delays и intParams).
+     * Применяет поля к сервису (для delays, intParams и booleanVariables).
      */
     private void applyFields(MockControllerClientBase service, Field[] fields, Map<String, Object> params) {
         for (Map.Entry<String, Object> entry : params.entrySet()) {
@@ -270,6 +221,25 @@ public class ConfigAggregator {
                     field.set(service, value);
                 } catch (Exception e) {
                     logger.warn("Error setting field {} in {}: {}", fieldName, service.getClass().getSimpleName(), e.getMessage());
+                }
+            }
+        }
+    }
+    
+    /**
+     * Применяет строковые поля к сервису (для stringParams).
+     */
+    private void applyStringFields(MockControllerClientBase service, Field[] fields, Map<String, Object> params) {
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            String fieldName = entry.getKey();
+            Field field = findField(fields, fieldName);
+            
+            if (field != null) {
+                try {
+                    field.setAccessible(true);
+                    field.set(service, String.valueOf(entry.getValue()));
+                } catch (Exception e) {
+                    logger.warn("Error setting string field {} in {}: {}", fieldName, service.getClass().getSimpleName(), e.getMessage());
                 }
             }
         }

@@ -26,6 +26,7 @@
 - Отправляет объединенную конфигурацию в MockController
 - Применяет обновления ко всем соответствующим сервисам
 - Управляет уровнем логирования
+- Поддерживает типы: `long` (delays), `int` (intParams), `boolean` (booleanVariables), `String` (stringParams)
 
 ### AppConfig
 Читает `spring.application.name` из конфигурации для идентификации заглушки.
