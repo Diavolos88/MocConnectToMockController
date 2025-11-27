@@ -90,6 +90,10 @@ public class YourService extends MockControllerClientBase {
     private int intStatusCode = 200;
     private int intResponseCode = 0;
     
+    // Параметры с префиксом "is" - будут автоматически извлекаться как boolean
+    private boolean isHealthTrue = true;
+    private boolean isDataAvailable = false;
+    
     // Параметры с префиксом "string" - будут автоматически извлекаться
     private String stringMode = "normal";
     private String stringStatus = "active";
@@ -141,6 +145,10 @@ public class YourService extends MockControllerClientBase {
         "intStatusCode": "200",
         "intResponseCode": "0"
       },
+      "booleanVariables": {
+        "isHealthTrue": "true",
+        "isDataAvailable": "false"
+      },
       "stringParams": {
         "stringMode": "normal",
         "stringStatus": "active"
@@ -154,6 +162,7 @@ public class YourService extends MockControllerClientBase {
 
 - **Поля для задержек**: должны начинаться с `delay` (например: `delayResponse`, `delayHelloWorld`)
 - **Поля для целочисленных параметров**: должны начинаться с `int` (например: `intStatusCode`, `intUserId`)
+- **Поля для boolean параметров**: должны начинаться с `is` (например: `isHealthTrue`, `isDataAvailable`)
 - **Поля для строковых параметров**: должны начинаться с `string` (например: `stringMode`, `stringStatus`)
 - **Имена полей**: используются как ключи в конфигурации, поэтому должны точно совпадать
 
@@ -222,7 +231,7 @@ public class ComplexMockService extends MockControllerClientBase {
 ### Поля не обновляются
 
 - Убедитесь, что имена полей точно совпадают с ключами в конфигурации MockController
-- Проверьте, что поля начинаются с `delay`, `int` или `string`
+- Проверьте, что поля начинаются с `delay`, `int`, `is` или `string`
 - Убедитесь, что поля объявлены как `private` (рефлексия работает с private полями)
 - Убедитесь, что ваш сервис помечен аннотацией `@Service` и наследуется от `MockControllerClientBase`
 

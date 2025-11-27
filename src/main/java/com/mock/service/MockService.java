@@ -24,6 +24,7 @@ public class MockService extends MockControllerClientBase {
     private long delayHealthCheck = 500; // задержка в миллисекундах
     private String stringHealthCheckRs = "OK";
     private int intHealthStatusCode = 200; // HTTP статус код
+    private boolean isHealthTrue = true; // Boolean параметр для health
     
     public ResponseEntity<Map<String, String>> getHelloResponse() {
         try {
@@ -47,6 +48,7 @@ public class MockService extends MockControllerClientBase {
         
         Map<String, String> response = new HashMap<>();
         response.put("status", stringHealthCheckRs);
+        response.put("isHealthy", String.valueOf(isHealthTrue));
         return ResponseEntity.status(intHealthStatusCode).body(response);
     }
     
@@ -107,6 +109,15 @@ public class MockService extends MockControllerClientBase {
     
     public void setIntResponseValue(int intResponseValue) {
         this.intResponseValue = intResponseValue;
+    }
+    
+    // Геттеры и сеттеры для boolean параметров
+    public boolean isHealthTrue() {
+        return isHealthTrue;
+    }
+    
+    public void setHealthTrue(boolean healthTrue) {
+        isHealthTrue = healthTrue;
     }
 }
 

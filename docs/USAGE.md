@@ -118,13 +118,18 @@ public class YourService extends MockControllerClientBase {
    - Должны быть числового типа (`int`, `Integer`)
    - Примеры: `intStatusCode`, `intUserId`, `intResponseCode`
 
-3. **Поля для строковых параметров (stringParams):**
+3. **Поля для boolean параметров (booleanVariables):**
+   - Должны начинаться с `is`
+   - Должны быть типа `boolean` или `Boolean`
+   - Примеры: `isHealthTrue`, `isDataAvailable`, `isEnabled`
+
+4. **Поля для строковых параметров (stringParams):**
    - Должны начинаться с `string`
    - Должны быть типа `String`
    - Примеры: `stringMode`, `stringStatus`, `stringResponse`
 
-4. **Обычные поля:**
-   - Поля, не начинающиеся с `delay`, `int` или `string`, игнорируются
+5. **Обычные поля:**
+   - Поля, не начинающиеся с `delay`, `int`, `is` или `string`, игнорируются
    - Могут использоваться для внутренней логики
 
 ### Пример сервиса
@@ -248,6 +253,10 @@ logging:
     "intParams": {
       "intStatusCode": "200",
       "intUserId": "12345"
+    },
+    "booleanVariables": {
+      "isHealthTrue": "true",
+      "isDataAvailable": "false"
     },
     "stringParams": {
       "stringPaymentStatus": "success",

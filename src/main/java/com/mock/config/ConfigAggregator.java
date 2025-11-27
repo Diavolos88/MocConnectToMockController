@@ -66,6 +66,7 @@ public class ConfigAggregator {
         Map<String, String> delays = new HashMap<>();
         Map<String, String> intParams = new HashMap<>();
         Map<String, String> stringParams = new HashMap<>();
+        Map<String, String> booleanVariables = new HashMap<>();
         
         List<MockControllerClientBase> services = getAllConfigurableServices();
         
@@ -84,15 +85,20 @@ public class ConfigAggregator {
             // Извлекаем stringParams
             Map<String, String> serviceStringParams = extractStringParams(service);
             stringParams.putAll(serviceStringParams);
+            
+            // Извлекаем booleanVariables
+            Map<String, String> serviceBooleanVariables = extractBooleanVariables(service);
+            booleanVariables.putAll(serviceBooleanVariables);
         }
         
         config.put("delays", delays);
         config.put("intParams", intParams);
         config.put("stringParams", stringParams);
+        config.put("booleanVariables", booleanVariables);
         config.put("loggingLv", loggingConfig.getLoggingLevel());
         
-        logger.debug("Aggregated config: delays={}, intParams={}, stringParams={}", 
-            delays.size(), intParams.size(), stringParams.size());
+        logger.debug("Aggregated config: delays={}, intParams={}, stringParams={}, booleanVariables={}", 
+            delays.size(), intParams.size(), stringParams.size(), booleanVariables.size());
         
         return config;
     }
@@ -170,6 +176,30 @@ public class ConfigAggregator {
     }
     
     /**
+     * Извлекает все поля, начинающиеся с "is" из сервиса.
+     */
+    private Map<String, String> extractBooleanVariables(MockControllerClientBase service) {
+        Map<String, String> booleanVariables = new HashMap<>();
+        
+        try {
+            Class<?> clazz = service.getClass();
+            Field[] fields = clazz.getDeclaredFields();
+            
+            for (Field field : fields) {
+                if (field.getName().startsWith("is")) {
+                    field.setAccessible(true);
+                    Object value = field.get(service);
+                    booleanVariables.put(field.getName(), String.valueOf(value));
+                }
+            }
+        } catch (IllegalAccessException e) {
+            logger.error("Error extracting booleanVariables from {}: {}", service.getClass().getSimpleName(), e.getMessage());
+        }
+        
+        return booleanVariables;
+    }
+    
+    /**
      * Применяет конфигурацию ко всем сервисам.
      */
     private void applyConfigToAllServices(Map<String, Object> config) {
@@ -199,6 +229,12 @@ public class ConfigAggregator {
             if (config.containsKey("intParams")) {
                 Map<String, Object> intParams = (Map<String, Object>) config.get("intParams");
                 applyFields(service, fields, intParams);
+            }
+            
+            // Применяем booleanVariables
+            if (config.containsKey("booleanVariables")) {
+                Map<String, Object> booleanVariables = (Map<String, Object>) config.get("booleanVariables");
+                applyFields(service, fields, booleanVariables);
             }
             
             // Применяем stringParams
@@ -259,6 +295,8 @@ public class ConfigAggregator {
             return Long.parseLong(value);
         } else if (type == int.class || type == Integer.class) {
             return Integer.parseInt(value);
+        } else if (type == boolean.class || type == Boolean.class) {
+            return Boolean.parseBoolean(value);
         } else if (type == String.class) {
             return value;
         }

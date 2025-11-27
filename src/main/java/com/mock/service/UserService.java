@@ -20,6 +20,7 @@ public class UserService extends MockControllerClientBase {
     private long delayDataFetch = 600; // задержка в миллисекундах
     private String stringDataFetchResult = "Data retrieved";
     private int intDataFetchStatusCode = 200; // HTTP статус код
+    private boolean isDataAvailable = true; // Boolean параметр для data
     
     public ResponseEntity<Map<String, String>> getUserLoginResponse() {
         try {
@@ -43,6 +44,7 @@ public class UserService extends MockControllerClientBase {
         
         Map<String, String> response = new HashMap<>();
         response.put("data", stringDataFetchResult);
+        response.put("isAvailable", String.valueOf(isDataAvailable));
         return ResponseEntity.status(intDataFetchStatusCode).body(response);
     }
     
@@ -103,6 +105,15 @@ public class UserService extends MockControllerClientBase {
     
     public void setIntUserId(int intUserId) {
         this.intUserId = intUserId;
+    }
+    
+    // Геттеры и сеттеры для boolean параметров
+    public boolean isDataAvailable() {
+        return isDataAvailable;
+    }
+    
+    public void setDataAvailable(boolean dataAvailable) {
+        isDataAvailable = dataAvailable;
     }
 }
 
