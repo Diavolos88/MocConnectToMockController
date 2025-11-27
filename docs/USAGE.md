@@ -17,18 +17,21 @@
 Библиотека состоит из следующих компонентов:
 
 ### MockControllerClientBase
-Базовый класс, от которого наследуется ваш сервис. Содержит всю логику работы с MockController:
-- Автоматически извлекает конфигурацию из текущего объекта через рефлексию
-- Отправляет конфигурацию при старте приложения
-- Периодически проверяет наличие обновлений
-- Загружает и применяет обновленную конфигурацию к текущему объекту
+Базовый класс, от которого наследуется ваш сервис. Просто наследуйтесь от этого класса - вся логика синхронизации выполняется автоматически через `ConfigAggregator`.
+
+### ConfigAggregator
+Централизованный компонент, который:
+- Автоматически находит все сервисы, наследующиеся от `MockControllerClientBase`
+- Собирает конфигурацию от всех сервисов в один общий конфиг
+- Отправляет объединенную конфигурацию в MockController
+- Применяет обновления ко всем соответствующим сервисам
 - Управляет уровнем логирования
 
 ### AppConfig
 Читает `spring.application.name` из конфигурации для идентификации заглушки.
 
 ### LoggingConfig
-Читает уровень логирования из `logging.level.{package}` для динамического управления.
+Читает уровень логирования из `logging.logback.level` для динамического управления.
 
 ### MockControllerConfig
 Настройки подключения к MockController (URL, интервал проверки).
@@ -44,6 +47,7 @@
 ```
 src/main/java/com/mock/config/
 ├── AppConfig.java
+├── ConfigAggregator.java
 ├── LoggingConfig.java
 ├── MockControllerClientBase.java
 └── MockControllerConfig.java
@@ -109,13 +113,18 @@ public class YourService extends MockControllerClientBase {
    - Должны быть числового типа (`long`, `int`, `Integer`, `Long`)
    - Примеры: `delayResponse`, `delayHelloWorld`, `delayApiCall`
 
-2. **Поля для строковых параметров (stringParams):**
+2. **Поля для целочисленных параметров (intParams):**
+   - Должны начинаться с `int`
+   - Должны быть числового типа (`int`, `Integer`)
+   - Примеры: `intStatusCode`, `intUserId`, `intResponseCode`
+
+3. **Поля для строковых параметров (stringParams):**
    - Должны начинаться с `string`
    - Должны быть типа `String`
    - Примеры: `stringMode`, `stringStatus`, `stringResponse`
 
-3. **Обычные поля:**
-   - Поля, не начинающиеся с `delay` или `string`, игнорируются
+4. **Обычные поля:**
+   - Поля, не начинающиеся с `delay`, `int` или `string`, игнорируются
    - Могут использоваться для внутренней логики
 
 ### Пример сервиса
@@ -190,8 +199,10 @@ mock-controller:
 
 # Логирование
 logging:
+  logback:
+    level: INFO                             # Уровень логирования для управления через MockController
   level:
-    com.yourpackage: INFO                  # Пакет для управления уровнем логирования
+    com.yourpackage: INFO                   # Пакет для управления уровнем логирования
     org.springframework: WARN
 ```
 
@@ -233,6 +244,10 @@ logging:
       "delayPaymentProcessing": "1500",
       "delayValidation": "300",
       "delayNotification": "200"
+    },
+    "intParams": {
+      "intStatusCode": "200",
+      "intUserId": "12345"
     },
     "stringParams": {
       "stringPaymentStatus": "success",

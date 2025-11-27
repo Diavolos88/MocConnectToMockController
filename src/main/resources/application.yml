@@ -21,7 +21,10 @@ mock:
 
 # Логирование
 logging:
+  logback:
+    level: INFO
   level:
     com.mock: INFO
+    com.mock.config: DEBUG  # Детальное логирование для отслеживания проверок конфигурации
     org.springframework: INFO
 

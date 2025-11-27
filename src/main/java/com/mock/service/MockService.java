@@ -13,6 +13,8 @@ public class MockService extends MockControllerClientBase {
     // Параметры для Hello World эндпоинта
     private long delayHelloWorld = 1000; // задержка в миллисекундах
     private String stringHelloWorldRs = "Hello World!";
+    private int intHelloStatusCode = 200; // HTTP статус код для hello
+    private int intResponseValue = 5030; // Пример числового значения
     @SuppressWarnings("unused")
     private long delayHello = 111; // задержка в миллисекундах
     @SuppressWarnings("unused")
@@ -21,6 +23,7 @@ public class MockService extends MockControllerClientBase {
     // Параметры для Health Check эндпоинта
     private long delayHealthCheck = 500; // задержка в миллисекундах
     private String stringHealthCheckRs = "OK";
+    private int intHealthStatusCode = 200; // HTTP статус код
     
     public ResponseEntity<Map<String, String>> getHelloResponse() {
         try {
@@ -31,7 +34,8 @@ public class MockService extends MockControllerClientBase {
         
         Map<String, String> response = new HashMap<>();
         response.put("message", stringHelloWorldRs);
-        return ResponseEntity.ok(response);
+        response.put("responseValue", String.valueOf(intResponseValue));
+        return ResponseEntity.status(intHelloStatusCode).body(response);
     }
     
     public ResponseEntity<Map<String, String>> getHealthResponse() {
@@ -43,7 +47,7 @@ public class MockService extends MockControllerClientBase {
         
         Map<String, String> response = new HashMap<>();
         response.put("status", stringHealthCheckRs);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.status(intHealthStatusCode).body(response);
     }
     
     // Геттеры и сеттеры для параметров Hello World
@@ -78,6 +82,31 @@ public class MockService extends MockControllerClientBase {
     
     public void setStringHealthCheckRs(String stringHealthCheckRs) {
         this.stringHealthCheckRs = stringHealthCheckRs;
+    }
+    
+    // Геттеры и сеттеры для int параметров
+    public int getIntHealthStatusCode() {
+        return intHealthStatusCode;
+    }
+    
+    public void setIntHealthStatusCode(int intHealthStatusCode) {
+        this.intHealthStatusCode = intHealthStatusCode;
+    }
+    
+    public int getIntHelloStatusCode() {
+        return intHelloStatusCode;
+    }
+    
+    public void setIntHelloStatusCode(int intHelloStatusCode) {
+        this.intHelloStatusCode = intHelloStatusCode;
+    }
+    
+    public int getIntResponseValue() {
+        return intResponseValue;
+    }
+    
+    public void setIntResponseValue(int intResponseValue) {
+        this.intResponseValue = intResponseValue;
     }
 }
 

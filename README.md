@@ -9,6 +9,7 @@
 - Периодически проверять наличие обновлений конфигурации
 - Автоматически применять обновления без перезапуска
 - Динамически изменять уровень логирования
+- **Централизованно собирать конфигурацию от всех сервисов** - несколько сервисов могут работать одновременно без конфликтов
 
 ## Быстрый старт
 
@@ -51,6 +52,8 @@ mock-controller:
 
 # Логирование
 logging:
+  logback:
+    level: INFO  # Уровень логирования для управления через MockController
   level:
     com.yourpackage: INFO  # Пакет, для которого будет управляться уровень логирования
 ```
@@ -83,6 +86,10 @@ public class YourService extends MockControllerClientBase {
     private long delayResponse = 1000;
     private long delayProcessing = 500;
     
+    // Параметры с префиксом "int" - будут автоматически извлекаться
+    private int intStatusCode = 200;
+    private int intResponseCode = 0;
+    
     // Параметры с префиксом "string" - будут автоматически извлекаться
     private String stringMode = "normal";
     private String stringStatus = "active";
@@ -103,16 +110,17 @@ public class YourService extends MockControllerClientBase {
 ## Как это работает
 
 1. **При старте приложения:**
-   - Библиотека автоматически извлекает все поля, начинающиеся с `delay` и `string`, из вашего сервиса
-   - Отправляет конфигурацию в MockController через `/api/configs/checkUpdate`
-   - Если MockController сообщает о необходимости обновления, загружает и применяет новый конфиг
+   - `ConfigAggregator` автоматически находит все сервисы, наследующиеся от `MockControllerClientBase`
+   - Собирает конфигурацию от всех сервисов (поля с префиксами `delay*`, `int*`, `string*`)
+   - Отправляет объединенную конфигурацию в MockController через `/api/configs/checkUpdate`
+   - Если MockController сообщает о необходимости обновления, загружает и применяет новый конфиг ко всем сервисам
 
 2. **Периодическая проверка:**
-   - Каждые N секунд (настраивается в `check-interval-seconds`) библиотека проверяет наличие обновлений
-   - При обнаружении обновлений автоматически применяет их к вашему сервису
+   - Каждые N секунд (настраивается в `check-interval-seconds`) `ConfigAggregator` проверяет наличие обновлений
+   - При обнаружении обновлений автоматически применяет их ко всем соответствующим сервисам
 
 3. **Применение конфигурации:**
-   - Библиотека использует рефлексию для обновления полей в вашем сервисе
+   - Библиотека использует рефлексию для обновления полей в сервисах
    - Имена полей должны точно совпадать с ключами в конфигурации
    - Уровень логирования обновляется динамически через Logback
 
@@ -124,23 +132,28 @@ public class YourService extends MockControllerClientBase {
 {
   "SystemName": "your-service-name",
   "version": "v1",
-  "config": {
-    "delays": {
-      "delayResponse": "1000",
-      "delayProcessing": "500"
-    },
-    "stringParams": {
-      "stringMode": "normal",
-      "stringStatus": "active"
-    },
-    "loggingLv": "INFO"
-  }
+    "config": {
+      "delays": {
+        "delayResponse": "1000",
+        "delayProcessing": "500"
+      },
+      "intParams": {
+        "intStatusCode": "200",
+        "intResponseCode": "0"
+      },
+      "stringParams": {
+        "stringMode": "normal",
+        "stringStatus": "active"
+      },
+      "loggingLv": "INFO"
+    }
 }
 ```
 
 ## Правила именования полей
 
 - **Поля для задержек**: должны начинаться с `delay` (например: `delayResponse`, `delayHelloWorld`)
+- **Поля для целочисленных параметров**: должны начинаться с `int` (например: `intStatusCode`, `intUserId`)
 - **Поля для строковых параметров**: должны начинаться с `string` (например: `stringMode`, `stringStatus`)
 - **Имена полей**: используются как ключи в конфигурации, поэтому должны точно совпадать
 
@@ -202,15 +215,16 @@ public class ComplexMockService extends MockControllerClientBase {
 - `DEBUG`
 - `TRACE`
 
-Уровень применяется к пакету, указанному в `logging.level.{package}` в `application.yml`.
+Уровень логирования читается из `logging.logback.level` в `application.yml` и может быть изменен динамически через MockController.
 
 ## Устранение неполадок
 
 ### Поля не обновляются
 
 - Убедитесь, что имена полей точно совпадают с ключами в конфигурации MockController
-- Проверьте, что поля начинаются с `delay` или `string`
+- Проверьте, что поля начинаются с `delay`, `int` или `string`
 - Убедитесь, что поля объявлены как `private` (рефлексия работает с private полями)
+- Убедитесь, что ваш сервис помечен аннотацией `@Service` и наследуется от `MockControllerClientBase`
 
 ### Конфигурация не отправляется
 
@@ -220,7 +234,7 @@ public class ComplexMockService extends MockControllerClientBase {
 
 ### Уровень логирования не меняется
 
-- Убедитесь, что в `application.yml` указан правильный пакет в `logging.level.{package}`
+- Убедитесь, что в `application.yml` указан параметр `logging.logback.level`
 - Проверьте, что значение `loggingLv` в конфигурации соответствует одному из поддерживаемых уровней
 
 ## Дополнительная информация

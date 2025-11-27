@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class LoggingConfig {
     
-    @Value("${logging.level.com.mock:INFO}")
+    @Value("${logging.logback.level:INFO}")
     private String loggingLevel = "INFO";
     
     public String getLoggingLevel() {
