@@ -227,6 +227,8 @@ public class ConfigAggregator {
     
     /**
      * Применяет конфигурацию к конкретному сервису.
+     * Если некоторые значения не могут быть применены (например, слишком большое для int),
+     * они пропускаются, но остальные значения применяются нормально.
      */
     @SuppressWarnings("unchecked")
     private void applyConfigToService(MockControllerClientBase service, Map<String, Object> config) {
@@ -270,12 +272,12 @@ public class ConfigAggregator {
                 if (stringParamsObj instanceof Map<?, ?>) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> stringParams = (Map<String, Object>) stringParamsObj;
-                    applyStringFields(service, fields, stringParams);
+                    applyStringFieldsWithCount(service, fields, stringParams);
                 }
             }
             
         } catch (Exception e) {
-            logger.error("Error applying config to {}: {}", service.getClass().getSimpleName(), e.getMessage(), e);
+            logger.error("Unexpected error applying config to {}: {}", service.getClass().getSimpleName(), e.getMessage(), e);
         }
     }
     
@@ -293,23 +295,43 @@ public class ConfigAggregator {
                     String stringValue = String.valueOf(entry.getValue());
                     Object value = parseValue(field.getType(), stringValue);
                     field.set(service, value);
+                    logger.debug("Successfully applied value '{}' to field {} in {}", 
+                        stringValue, fieldName, service.getClass().getSimpleName());
                 } catch (NumberFormatException e) {
-                    logger.warn("Failed to parse value for field {} in {}: {}. Value: {}", 
+                    // Значение не может быть распарсено (например, слишком большое для int)
+                    // Пропускаем это значение, но продолжаем применять остальные
+                    logger.warn("Skipping invalid value for field {} in {}: {}. Original value: '{}'. Field will keep its current value.", 
                         fieldName, service.getClass().getSimpleName(), e.getMessage(), entry.getValue());
                 } catch (IllegalArgumentException e) {
-                    logger.warn("Invalid value for field {} in {}: {}", 
-                        fieldName, service.getClass().getSimpleName(), e.getMessage());
+                    // Невалидное значение (null, пустое, неправильный формат)
+                    // Пропускаем это значение, но продолжаем применять остальные
+                    logger.warn("Skipping invalid value for field {} in {}: {}. Original value: '{}'. Field will keep its current value.", 
+                        fieldName, service.getClass().getSimpleName(), e.getMessage(), entry.getValue());
+                } catch (IllegalAccessException e) {
+                    // Не удалось установить значение в поле (например, final поле)
+                    logger.warn("Cannot set value for field {} in {}: {}. Field may be final or not accessible. Original value: '{}'", 
+                        fieldName, service.getClass().getSimpleName(), e.getMessage(), entry.getValue());
                 } catch (Exception e) {
-                    logger.warn("Error setting field {} in {}: {}", fieldName, service.getClass().getSimpleName(), e.getMessage());
+                    // Любая другая ошибка при установке значения
+                    // Пропускаем это значение, но продолжаем применять остальные
+                    logger.warn("Error setting field {} in {}: {}. Original value: '{}'. Field will keep its current value.", 
+                        fieldName, service.getClass().getSimpleName(), e.getMessage(), entry.getValue());
                 }
+            } else {
+                logger.debug("Field {} not found in {}, skipping (this is normal if field was removed)", 
+                    fieldName, service.getClass().getSimpleName());
             }
         }
     }
     
     /**
-     * Применяет строковые поля к сервису (для stringParams).
+     * Применяет строковые поля к сервису (для stringParams) и возвращает счетчики.
+     * @return массив [применено, пропущено]
      */
-    private void applyStringFields(MockControllerClientBase service, Field[] fields, Map<String, Object> params) {
+    private int[] applyStringFieldsWithCount(MockControllerClientBase service, Field[] fields, Map<String, Object> params) {
+        int applied = 0;
+        int skipped = 0;
+        
         for (Map.Entry<String, Object> entry : params.entrySet()) {
             String fieldName = entry.getKey();
             Field field = findField(fields, fieldName);
@@ -317,12 +339,39 @@ public class ConfigAggregator {
             if (field != null) {
                 try {
                     field.setAccessible(true);
-                    field.set(service, String.valueOf(entry.getValue()));
+                    String stringValue = String.valueOf(entry.getValue());
+                    field.set(service, stringValue);
+                    applied++;
+                    logger.debug("Successfully applied string value '{}' to field {} in {}", 
+                        stringValue, fieldName, service.getClass().getSimpleName());
+                } catch (IllegalAccessException e) {
+                    // Не удалось установить значение в поле (например, final поле)
+                    skipped++;
+                    logger.warn("Cannot set string value for field {} in {}: {}. Field may be final or not accessible. Original value: '{}'", 
+                        fieldName, service.getClass().getSimpleName(), e.getMessage(), entry.getValue());
                 } catch (Exception e) {
-                    logger.warn("Error setting string field {} in {}: {}", fieldName, service.getClass().getSimpleName(), e.getMessage());
+                    // Любая другая ошибка при установке значения
+                    // Пропускаем это значение, но продолжаем применять остальные
+                    skipped++;
+                    logger.warn("Error setting string field {} in {}: {}. Original value: '{}'. Field will keep its current value.", 
+                        fieldName, service.getClass().getSimpleName(), e.getMessage(), entry.getValue());
                 }
+            } else {
+                logger.debug("String field {} not found in {}, skipping (this is normal if field was removed)", 
+                    fieldName, service.getClass().getSimpleName());
             }
         }
+        
+        return new int[]{applied, skipped};
+    }
+    
+    /**
+     * Применяет строковые поля к сервису (для stringParams).
+     * @deprecated Используйте applyStringFieldsWithCount для получения статистики
+     */
+    @Deprecated
+    private void applyStringFields(MockControllerClientBase service, Field[] fields, Map<String, Object> params) {
+        applyStringFieldsWithCount(service, fields, params);
     }
     
     /**
@@ -339,29 +388,60 @@ public class ConfigAggregator {
     
     /**
      * Парсит значение в зависимости от типа поля.
-     * @throws NumberFormatException если значение не может быть распарсено
+     * @throws NumberFormatException если значение не может быть распарсено (например, слишком большое для int)
+     * @throws IllegalArgumentException если значение null или не может быть преобразовано
      */
-    private Object parseValue(Class<?> type, String value) throws NumberFormatException {
-        if (value == null) {
-            throw new IllegalArgumentException("Value cannot be null");
+    private Object parseValue(Class<?> type, String value) throws NumberFormatException, IllegalArgumentException {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException("Value cannot be null or empty");
         }
+        
+        String trimmedValue = value.trim();
         
         try {
             if (type == long.class || type == Long.class) {
-                return Long.parseLong(value);
+                // Проверяем, что значение помещается в long
+                long parsed = Long.parseLong(trimmedValue);
+                return parsed;
             } else if (type == int.class || type == Integer.class) {
-                return Integer.parseInt(value);
+                // Проверяем, что значение помещается в int
+                try {
+                    long longValue = Long.parseLong(trimmedValue);
+                    if (longValue < Integer.MIN_VALUE || longValue > Integer.MAX_VALUE) {
+                        throw new NumberFormatException(
+                            String.format("Value %s is out of range for int (must be between %d and %d)", 
+                                trimmedValue, Integer.MIN_VALUE, Integer.MAX_VALUE)
+                        );
+                    }
+                    return (int) longValue;
+                } catch (NumberFormatException e) {
+                    throw new NumberFormatException(
+                        String.format("Cannot parse '%s' as int: %s", trimmedValue, e.getMessage())
+                    );
+                }
             } else if (type == boolean.class || type == Boolean.class) {
-                return Boolean.parseBoolean(value);
+                // Boolean.parseBoolean не выбрасывает исключение, но проверим явно
+                String lowerValue = trimmedValue.toLowerCase();
+                if ("true".equals(lowerValue) || "false".equals(lowerValue)) {
+                    return Boolean.parseBoolean(lowerValue);
+                } else {
+                    throw new IllegalArgumentException(
+                        String.format("Cannot parse '%s' as boolean (must be 'true' or 'false')", trimmedValue)
+                    );
+                }
             } else if (type == String.class) {
-                return value;
+                return trimmedValue;
             }
         } catch (NumberFormatException e) {
-            logger.warn("Failed to parse value '{}' as type {}: {}", value, type.getSimpleName(), e.getMessage());
+            // Пробрасываем NumberFormatException дальше для специфичной обработки
+            throw e;
+        } catch (IllegalArgumentException e) {
+            // Пробрасываем IllegalArgumentException дальше
             throw e;
         }
         
-        return value;
+        // Если тип не распознан, возвращаем значение как есть
+        return trimmedValue;
     }
     
     /**
