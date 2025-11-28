@@ -64,8 +64,8 @@ public class ConfigAggregator {
      */
     private RestTemplate createRestTemplateWithTimeouts() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout((int) TimeUnit.SECONDS.toMillis(2)); // 2 секунды на подключение
-        factory.setReadTimeout((int) TimeUnit.SECONDS.toMillis(3)); // 3 секунды на чтение ответа
+        factory.setConnectTimeout((int) TimeUnit.SECONDS.toMillis(10)); // 10 секунд на подключение
+        factory.setReadTimeout((int) TimeUnit.SECONDS.toMillis(10)); // 10 секунд на чтение ответа
         return new RestTemplate(factory);
     }
     
