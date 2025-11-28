@@ -13,13 +13,16 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Централизованный компонент для сбора конфигурации от всех сервисов,
@@ -42,10 +45,29 @@ public class ConfigAggregator {
     @Autowired
     private LoggingConfig loggingConfig;
     
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private String version = "v1";
     private long lastCheckUpdateTime = 0;
     private int checkUpdateCount = 0;
+    private int errorCount = 0;
+    private String lastError = null;
+    
+    /**
+     * Конструктор для инициализации RestTemplate с таймаутами.
+     */
+    public ConfigAggregator() {
+        this.restTemplate = createRestTemplateWithTimeouts();
+    }
+    
+    /**
+     * Создает RestTemplate с настроенными таймаутами для предотвращения блокировки при недоступности MockController.
+     */
+    private RestTemplate createRestTemplateWithTimeouts() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) TimeUnit.SECONDS.toMillis(2)); // 2 секунды на подключение
+        factory.setReadTimeout((int) TimeUnit.SECONDS.toMillis(3)); // 3 секунды на чтение ответа
+        return new RestTemplate(factory);
+    }
     
     /**
      * Находит все сервисы, наследующиеся от MockControllerClientBase.
@@ -188,26 +210,42 @@ public class ConfigAggregator {
             
             // Применяем delays
             if (config.containsKey("delays")) {
-                Map<String, Object> delays = (Map<String, Object>) config.get("delays");
-                applyFields(service, fields, delays);
+                Object delaysObj = config.get("delays");
+                if (delaysObj instanceof Map<?, ?>) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> delays = (Map<String, Object>) delaysObj;
+                    applyFields(service, fields, delays);
+                }
             }
             
             // Применяем intParams
             if (config.containsKey("intParams")) {
-                Map<String, Object> intParams = (Map<String, Object>) config.get("intParams");
-                applyFields(service, fields, intParams);
+                Object intParamsObj = config.get("intParams");
+                if (intParamsObj instanceof Map<?, ?>) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> intParams = (Map<String, Object>) intParamsObj;
+                    applyFields(service, fields, intParams);
+                }
             }
             
             // Применяем booleanVariables
             if (config.containsKey("booleanVariables")) {
-                Map<String, Object> booleanVariables = (Map<String, Object>) config.get("booleanVariables");
-                applyFields(service, fields, booleanVariables);
+                Object booleanVariablesObj = config.get("booleanVariables");
+                if (booleanVariablesObj instanceof Map<?, ?>) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> booleanVariables = (Map<String, Object>) booleanVariablesObj;
+                    applyFields(service, fields, booleanVariables);
+                }
             }
             
             // Применяем stringParams
             if (config.containsKey("stringParams")) {
-                Map<String, Object> stringParams = (Map<String, Object>) config.get("stringParams");
-                applyStringFields(service, fields, stringParams);
+                Object stringParamsObj = config.get("stringParams");
+                if (stringParamsObj instanceof Map<?, ?>) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> stringParams = (Map<String, Object>) stringParamsObj;
+                    applyStringFields(service, fields, stringParams);
+                }
             }
             
         } catch (Exception e) {
@@ -330,8 +368,13 @@ public class ConfigAggregator {
                 }
                 
                 if (responseBody.isNeedUpdate()) {
-                    logger.info("Config update required, loading version: {}", responseBody.getCurrentVersion());
-                    loadAndApplyConfig(responseBody.getCurrentVersion());
+                    String currentVersion = responseBody.getCurrentVersion();
+                    if (currentVersion != null) {
+                        logger.info("Config update required, loading version: {}", currentVersion);
+                        loadAndApplyConfig(currentVersion);
+                    } else {
+                        logger.warn("Config update required but currentVersion is null, skipping");
+                    }
                 } else {
                     logger.debug("No config update needed. Current version: {}", responseBody.getCurrentVersion());
                 }
@@ -339,8 +382,16 @@ public class ConfigAggregator {
                 logger.warn("Empty response received from MockController");
             }
             
+        } catch (RestClientException e) {
+            errorCount++;
+            lastError = e.getMessage();
+            logger.warn("MockController unavailable or error occurred (error #{}): {}. Application continues to work normally.", 
+                errorCount, e.getMessage());
         } catch (Exception e) {
-            logger.error("Error calling checkUpdate in MockController: {}", e.getMessage(), e);
+            errorCount++;
+            lastError = e.getMessage();
+            logger.error("Unexpected error calling checkUpdate in MockController (error #{}): {}", 
+                errorCount, e.getMessage(), e);
         }
     }
     
@@ -349,12 +400,22 @@ public class ConfigAggregator {
      */
     private void loadAndApplyConfig(String version) {
         try {
+            if (version == null || version.isEmpty()) {
+                logger.warn("Version is null or empty, cannot load config");
+                return;
+            }
+            
             if (mockControllerConfig == null || appConfig == null) {
                 logger.warn("MockController dependencies not initialized, cannot load config");
                 return;
             }
             
             String systemName = appConfig.getName();
+            if (systemName == null || systemName.isEmpty()) {
+                logger.warn("System name is null or empty, cannot load config");
+                return;
+            }
+            
             String url = mockControllerConfig.getUrl() + "/api/configs/" + systemName + "?version=" + version;
             
             ResponseEntity<ConfigResponse> response = restTemplate.exchange(
@@ -382,8 +443,11 @@ public class ConfigAggregator {
                 logger.warn("Empty response received when loading config");
             }
             
+        } catch (RestClientException e) {
+            logger.warn("MockController unavailable when loading config: {}. Application continues to work with current configuration.", 
+                e.getMessage());
         } catch (Exception e) {
-            logger.error("Error loading config from MockController: {}", e.getMessage(), e);
+            logger.error("Unexpected error loading config from MockController: {}", e.getMessage(), e);
         }
     }
     
@@ -451,12 +515,15 @@ public class ConfigAggregator {
         Map<String, Object> status = new HashMap<>();
         status.put("lastCheckUpdateTime", lastCheckUpdateTime > 0 ? new java.util.Date(lastCheckUpdateTime).toString() : "Never");
         status.put("checkUpdateCount", checkUpdateCount);
+        status.put("errorCount", errorCount);
+        status.put("lastError", lastError != null ? lastError : "None");
         status.put("currentVersion", version);
         status.put("checkIntervalSeconds", mockControllerConfig != null ? mockControllerConfig.getCheckIntervalSeconds() : 5);
         status.put("mockControllerUrl", mockControllerConfig != null ? mockControllerConfig.getUrl() : "Not configured");
         long timeSinceLastCheck = lastCheckUpdateTime > 0 ? (System.currentTimeMillis() - lastCheckUpdateTime) / 1000 : -1;
         status.put("secondsSinceLastCheck", timeSinceLastCheck);
         status.put("servicesCount", getAllConfigurableServices().size());
+        status.put("isMockControllerAvailable", errorCount == 0 || (timeSinceLastCheck >= 0 && timeSinceLastCheck < 10));
         return status;
     }
     

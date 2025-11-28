@@ -243,6 +243,8 @@ public class ComplexMockService extends MockControllerClientBase {
 - Проверьте URL MockController в `application.yml`
 - Убедитесь, что MockController запущен и доступен
 - Проверьте логи на наличие ошибок подключения
+- **Важно:** Приложение продолжает работать нормально даже если MockController недоступен
+- Ошибки подключения логируются как предупреждения и не влияют на работу заглушки
 
 ### Уровень логирования не меняется
 
