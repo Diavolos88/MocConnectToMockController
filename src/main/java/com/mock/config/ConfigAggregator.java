@@ -45,23 +45,23 @@ public class ConfigAggregator {
     @Autowired
     private LoggingConfig loggingConfig;
     
-    private RestTemplate restTemplate;
-    private RestTemplate healthcheckRestTemplate;
-    private String version = "v1";
-    private long lastCheckUpdateTime = 0;
-    private int checkUpdateCount = 0;
-    private int errorCount = 0;
-    private String lastError = null;
-    private boolean isMockControllerHealthy = true; // По умолчанию считаем здоровым
-    private long lastHealthcheckTime = 0;
-    private int healthcheckCount = 0;
-    private int healthcheckFailureCount = 0;
+    private volatile RestTemplate restTemplate;
+    private volatile RestTemplate healthcheckRestTemplate;
+    private volatile String version = "v1";
+    private volatile long lastCheckUpdateTime = 0;
+    private volatile int checkUpdateCount = 0;
+    private volatile int errorCount = 0;
+    private volatile String lastError = null;
+    private volatile boolean isMockControllerHealthy = true; // По умолчанию считаем здоровым
+    private volatile long lastHealthcheckTime = 0;
+    private volatile int healthcheckCount = 0;
+    private volatile int healthcheckFailureCount = 0;
     
     /**
      * Инициализация RestTemplate после инъекции зависимостей.
      */
     @Autowired
-    public void initializeRestTemplates() {
+    public synchronized void initializeRestTemplates() {
         if (mockControllerConfig != null) {
             this.restTemplate = createRestTemplateWithTimeouts(
                 mockControllerConfig.getConnectTimeoutSeconds(), 
@@ -156,9 +156,16 @@ public class ConfigAggregator {
             Field[] fields = clazz.getDeclaredFields();
             
             // Создаем варианты префикса с разным регистром
+            if (prefix == null || prefix.isEmpty()) {
+                logger.warn("Prefix is null or empty, skipping field extraction");
+                return result;
+            }
+            
             String prefixLower = prefix.toLowerCase();
             String prefixUpper = prefix.toUpperCase();
-            String prefixCapitalized = prefix.substring(0, 1).toUpperCase() + prefix.substring(1).toLowerCase();
+            String prefixCapitalized = prefix.length() > 0 
+                ? prefix.substring(0, 1).toUpperCase() + prefix.substring(1).toLowerCase()
+                : prefix;
             
             for (Field field : fields) {
                 String fieldName = field.getName();
@@ -286,6 +293,12 @@ public class ConfigAggregator {
                     String stringValue = String.valueOf(entry.getValue());
                     Object value = parseValue(field.getType(), stringValue);
                     field.set(service, value);
+                } catch (NumberFormatException e) {
+                    logger.warn("Failed to parse value for field {} in {}: {}. Value: {}", 
+                        fieldName, service.getClass().getSimpleName(), e.getMessage(), entry.getValue());
+                } catch (IllegalArgumentException e) {
+                    logger.warn("Invalid value for field {} in {}: {}", 
+                        fieldName, service.getClass().getSimpleName(), e.getMessage());
                 } catch (Exception e) {
                     logger.warn("Error setting field {} in {}: {}", fieldName, service.getClass().getSimpleName(), e.getMessage());
                 }
@@ -326,17 +339,28 @@ public class ConfigAggregator {
     
     /**
      * Парсит значение в зависимости от типа поля.
+     * @throws NumberFormatException если значение не может быть распарсено
      */
-    private Object parseValue(Class<?> type, String value) {
-        if (type == long.class || type == Long.class) {
-            return Long.parseLong(value);
-        } else if (type == int.class || type == Integer.class) {
-            return Integer.parseInt(value);
-        } else if (type == boolean.class || type == Boolean.class) {
-            return Boolean.parseBoolean(value);
-        } else if (type == String.class) {
-            return value;
+    private Object parseValue(Class<?> type, String value) throws NumberFormatException {
+        if (value == null) {
+            throw new IllegalArgumentException("Value cannot be null");
         }
+        
+        try {
+            if (type == long.class || type == Long.class) {
+                return Long.parseLong(value);
+            } else if (type == int.class || type == Integer.class) {
+                return Integer.parseInt(value);
+            } else if (type == boolean.class || type == Boolean.class) {
+                return Boolean.parseBoolean(value);
+            } else if (type == String.class) {
+                return value;
+            }
+        } catch (NumberFormatException e) {
+            logger.warn("Failed to parse value '{}' as type {}: {}", value, type.getSimpleName(), e.getMessage());
+            throw e;
+        }
+        
         return value;
     }
     
@@ -345,7 +369,9 @@ public class ConfigAggregator {
      */
     private Map<String, Object> buildCheckUpdateRequest() {
         Map<String, Object> request = new HashMap<>();
-        request.put("SystemName", appConfig.getName());
+        if (appConfig != null && appConfig.getName() != null) {
+            request.put("SystemName", appConfig.getName());
+        }
         request.put("version", version);
         request.put("config", buildAggregatedConfig());
         return request;
@@ -364,6 +390,16 @@ public class ConfigAggregator {
         try {
             if (mockControllerConfig == null || appConfig == null || loggingConfig == null) {
                 logger.warn("MockController dependencies not initialized, skipping checkUpdate");
+                return;
+            }
+            
+            // Инициализируем RestTemplate если еще не инициализирован
+            if (restTemplate == null) {
+                initializeRestTemplates();
+            }
+            
+            if (restTemplate == null) {
+                logger.error("Failed to initialize RestTemplate, skipping checkUpdate");
                 return;
             }
             
@@ -432,6 +468,16 @@ public class ConfigAggregator {
             
             if (mockControllerConfig == null || appConfig == null) {
                 logger.warn("MockController dependencies not initialized, cannot load config");
+                return;
+            }
+            
+            // Инициализируем RestTemplate если еще не инициализирован
+            if (restTemplate == null) {
+                initializeRestTemplates();
+            }
+            
+            if (restTemplate == null) {
+                logger.error("Failed to initialize RestTemplate, cannot load config");
                 return;
             }
             
@@ -565,8 +611,14 @@ public class ConfigAggregator {
                 return;
             }
             
-            if (healthcheckRestTemplate == null || restTemplate == null) {
+            if (healthcheckRestTemplate == null) {
                 initializeRestTemplates();
+            }
+            
+            if (healthcheckRestTemplate == null) {
+                logger.error("Failed to initialize healthcheckRestTemplate, marking as unhealthy");
+                isMockControllerHealthy = false;
+                return;
             }
             
             String healthcheckUrl = mockControllerConfig.getUrl() + mockControllerConfig.getHealthcheckPath();
