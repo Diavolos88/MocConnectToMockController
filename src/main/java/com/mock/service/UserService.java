@@ -23,9 +23,13 @@ public class UserService extends MockControllerClientBase {
     private boolean isDataAvailable = true; // Boolean параметр для data
     
     // Примеры переменных с большой буквы
+    @SuppressWarnings("unused")
     private long DELAY_USER_ACTION = 1500; // задержка с большой буквы
+    @SuppressWarnings("unused")
     private String STRING_USER_STATUS = "ACTIVE"; // строка с большой буквы
+    @SuppressWarnings("unused")
     private int INT_USER_ID = 99999; // int с большой буквы
+    @SuppressWarnings("unused")
     private boolean IS_USER_ACTIVE = true; // boolean с большой буквы
     
     public ResponseEntity<Map<String, String>> getUserLoginResponse() {
