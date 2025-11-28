@@ -9,6 +9,11 @@ spring:
 mock-controller:
   url: http://localhost:8080
   check-interval-seconds: 5  # Интервал проверки обновлений в секундах
+  healthcheck-path: /service/healthcheck  # Путь для healthcheck
+  healthcheck-timeout-seconds: 5  # Таймаут для healthcheck в секундах
+  healthcheck-interval-seconds: 10  # Интервал проверки healthcheck в секундах
+  connect-timeout-seconds: 10  # Таймаут подключения в секундах
+  read-timeout-seconds: 10  # Таймаут чтения ответа в секундах
 
 # Параметры заглушки
 mock:
