@@ -161,11 +161,12 @@ public class YourService extends MockControllerClientBase {
 
 ## Правила именования полей
 
-- **Поля для задержек**: должны начинаться с `delay` (например: `delayResponse`, `delayHelloWorld`)
-- **Поля для целочисленных параметров**: должны начинаться с `int` (например: `intStatusCode`, `intUserId`)
-- **Поля для boolean параметров**: должны начинаться с `is` (например: `isHealthTrue`, `isDataAvailable`)
-- **Поля для строковых параметров**: должны начинаться с `string` (например: `stringMode`, `stringStatus`)
+- **Поля для задержек**: должны начинаться с `delay`, `Delay` или `DELAY` (например: `delayResponse`, `DELAY_ALL_RESPONSE`)
+- **Поля для целочисленных параметров**: должны начинаться с `int`, `Int` или `INT` (например: `intStatusCode`, `INT_RESPONSE_CODE`)
+- **Поля для boolean параметров**: должны начинаться с `is`, `Is` или `IS` (например: `isHealthTrue`, `IS_ENABLED`)
+- **Поля для строковых параметров**: должны начинаться с `string`, `String` или `STRING` (например: `stringMode`, `STRING_HEALTH_RS`)
 - **Имена полей**: используются как ключи в конфигурации, поэтому должны точно совпадать
+- **Регистр**: поддерживаются переменные как с маленькой, так и с большой буквы
 
 ## Примеры использования
 
@@ -232,9 +233,10 @@ public class ComplexMockService extends MockControllerClientBase {
 ### Поля не обновляются
 
 - Убедитесь, что имена полей точно совпадают с ключами в конфигурации MockController
-- Проверьте, что поля начинаются с `delay`, `int`, `is` или `string`
+- Проверьте, что поля начинаются с `delay`/`Delay`/`DELAY`, `int`/`Int`/`INT`, `is`/`Is`/`IS` или `string`/`String`/`STRING`
 - Убедитесь, что поля объявлены как `private` (рефлексия работает с private полями)
 - Убедитесь, что ваш сервис помечен аннотацией `@Service` и наследуется от `MockControllerClientBase`
+- Регистр первой буквы не важен - поддерживаются оба варианта
 
 ### Конфигурация не отправляется
 

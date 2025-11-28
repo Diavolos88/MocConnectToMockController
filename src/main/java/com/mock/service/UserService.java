@@ -22,6 +22,12 @@ public class UserService extends MockControllerClientBase {
     private int intDataFetchStatusCode = 200; // HTTP статус код
     private boolean isDataAvailable = true; // Boolean параметр для data
     
+    // Примеры переменных с большой буквы
+    private long DELAY_USER_ACTION = 1500; // задержка с большой буквы
+    private String STRING_USER_STATUS = "ACTIVE"; // строка с большой буквы
+    private int INT_USER_ID = 99999; // int с большой буквы
+    private boolean IS_USER_ACTIVE = true; // boolean с большой буквы
+    
     public ResponseEntity<Map<String, String>> getUserLoginResponse() {
         try {
             Thread.sleep(delayUserLogin);

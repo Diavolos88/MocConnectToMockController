@@ -105,6 +105,7 @@ public class ConfigAggregator {
     
     /**
      * Универсальный метод для извлечения полей с заданным префиксом из сервиса.
+     * Поддерживает как маленькую, так и большую букву в начале префикса.
      */
     private Map<String, String> extractFieldsByPrefix(MockControllerClientBase service, String prefix) {
         Map<String, String> result = new HashMap<>();
@@ -113,8 +114,17 @@ public class ConfigAggregator {
             Class<?> clazz = service.getClass();
             Field[] fields = clazz.getDeclaredFields();
             
+            // Создаем варианты префикса с разным регистром
+            String prefixLower = prefix.toLowerCase();
+            String prefixUpper = prefix.toUpperCase();
+            String prefixCapitalized = prefix.substring(0, 1).toUpperCase() + prefix.substring(1).toLowerCase();
+            
             for (Field field : fields) {
-                if (field.getName().startsWith(prefix)) {
+                String fieldName = field.getName();
+                // Проверяем все варианты регистра
+                if (fieldName.startsWith(prefixLower) || 
+                    fieldName.startsWith(prefixUpper) || 
+                    fieldName.startsWith(prefixCapitalized)) {
                     field.setAccessible(true);
                     Object value = field.get(service);
                     result.put(field.getName(), String.valueOf(value));
@@ -129,28 +139,28 @@ public class ConfigAggregator {
     }
     
     /**
-     * Извлекает все поля, начинающиеся с "delay" из сервиса.
+     * Извлекает все поля, начинающиеся с "delay", "Delay" или "DELAY" из сервиса.
      */
     private Map<String, String> extractDelays(MockControllerClientBase service) {
         return extractFieldsByPrefix(service, "delay");
     }
     
     /**
-     * Извлекает все поля, начинающиеся с "int" из сервиса.
+     * Извлекает все поля, начинающиеся с "int", "Int" или "INT" из сервиса.
      */
     private Map<String, String> extractIntParams(MockControllerClientBase service) {
         return extractFieldsByPrefix(service, "int");
     }
     
     /**
-     * Извлекает все поля, начинающиеся с "string" из сервиса.
+     * Извлекает все поля, начинающиеся с "string", "String" или "STRING" из сервиса.
      */
     private Map<String, String> extractStringParams(MockControllerClientBase service) {
         return extractFieldsByPrefix(service, "string");
     }
     
     /**
-     * Извлекает все поля, начинающиеся с "is" из сервиса.
+     * Извлекает все поля, начинающиеся с "is", "Is" или "IS" из сервиса.
      */
     private Map<String, String> extractBooleanVariables(MockControllerClientBase service) {
         return extractFieldsByPrefix(service, "is");

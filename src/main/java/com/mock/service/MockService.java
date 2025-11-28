@@ -26,6 +26,16 @@ public class MockService extends MockControllerClientBase {
     private int intHealthStatusCode = 200; // HTTP статус код
     private boolean isHealthTrue = true; // Boolean параметр для health
     
+    // Примеры переменных с большой буквы
+    @SuppressWarnings("unused")
+    private long DELAY_ALL_RESPONSE = 2000; // задержка с большой буквы
+    @SuppressWarnings("unused")
+    private String STRING_HEALTH_RS = "HEALTH_OK"; // строка с большой буквы
+    @SuppressWarnings("unused")
+    private int INT_RESPONSE_CODE = 201; // int с большой буквы
+    @SuppressWarnings("unused")
+    private boolean IS_ENABLED = false; // boolean с большой буквы
+    
     public ResponseEntity<Map<String, String>> getHelloResponse() {
         try {
             Thread.sleep(delayHelloWorld);

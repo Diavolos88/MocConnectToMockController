@@ -110,28 +110,29 @@ public class YourService extends MockControllerClientBase {
 Библиотека автоматически извлекает поля по следующим правилам:
 
 1. **Поля для задержек (delays):**
-   - Должны начинаться с `delay`
+   - Должны начинаться с `delay`, `Delay` или `DELAY`
    - Должны быть числового типа (`long`, `int`, `Integer`, `Long`)
-   - Примеры: `delayResponse`, `delayHelloWorld`, `delayApiCall`
+   - Примеры: `delayResponse`, `DELAY_ALL_RESPONSE`, `DelayApiCall`
 
 2. **Поля для целочисленных параметров (intParams):**
-   - Должны начинаться с `int`
+   - Должны начинаться с `int`, `Int` или `INT`
    - Должны быть числового типа (`int`, `Integer`)
-   - Примеры: `intStatusCode`, `intUserId`, `intResponseCode`
+   - Примеры: `intStatusCode`, `INT_RESPONSE_CODE`, `IntUserId`
 
 3. **Поля для boolean параметров (booleanVariables):**
-   - Должны начинаться с `is`
+   - Должны начинаться с `is`, `Is` или `IS`
    - Должны быть типа `boolean` или `Boolean`
-   - Примеры: `isHealthTrue`, `isDataAvailable`, `isEnabled`
+   - Примеры: `isHealthTrue`, `IS_ENABLED`, `IsDataAvailable`
 
 4. **Поля для строковых параметров (stringParams):**
-   - Должны начинаться с `string`
+   - Должны начинаться с `string`, `String` или `STRING`
    - Должны быть типа `String`
-   - Примеры: `stringMode`, `stringStatus`, `stringResponse`
+   - Примеры: `stringMode`, `STRING_HEALTH_RS`, `StringStatus`
 
 5. **Обычные поля:**
-   - Поля, не начинающиеся с `delay`, `int`, `is` или `string`, игнорируются
+   - Поля, не начинающиеся с указанных префиксов, игнорируются
    - Могут использоваться для внутренней логики
+   - **Регистр**: поддерживаются переменные как с маленькой, так и с большой буквы
 
 ### Пример сервиса
 
