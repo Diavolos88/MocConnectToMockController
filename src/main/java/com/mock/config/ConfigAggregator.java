@@ -45,17 +45,15 @@ public class ConfigAggregator {
     @Autowired
     private LoggingConfig loggingConfig;
     
+    @Autowired
+    private HealthcheckSender healthcheckSender;
+    
     private volatile RestTemplate restTemplate;
-    private volatile RestTemplate healthcheckRestTemplate;
     private volatile String version = "v1";
     private volatile long lastCheckUpdateTime = 0;
     private volatile int checkUpdateCount = 0;
     private volatile int errorCount = 0;
     private volatile String lastError = null;
-    private volatile boolean isMockControllerHealthy = true; // По умолчанию считаем здоровым
-    private volatile long lastHealthcheckTime = 0;
-    private volatile int healthcheckCount = 0;
-    private volatile int healthcheckFailureCount = 0;
     
     /**
      * Инициализация RestTemplate после инъекции зависимостей.
@@ -67,14 +65,9 @@ public class ConfigAggregator {
                 mockControllerConfig.getConnectTimeoutSeconds(), 
                 mockControllerConfig.getReadTimeoutSeconds()
             );
-            this.healthcheckRestTemplate = createRestTemplateWithTimeouts(
-                mockControllerConfig.getHealthcheckTimeoutSeconds(),
-                mockControllerConfig.getHealthcheckTimeoutSeconds()
-            );
         } else {
             // Fallback значения если конфиг еще не загружен
             this.restTemplate = createRestTemplateWithTimeouts(10, 10);
-            this.healthcheckRestTemplate = createRestTemplateWithTimeouts(5, 5);
         }
     }
     
@@ -462,7 +455,7 @@ public class ConfigAggregator {
      */
     public void checkUpdate() {
         // Не выполняем checkUpdate если MockController не здоров
-        if (!isMockControllerHealthy) {
+        if (healthcheckSender != null && !healthcheckSender.isMockControllerHealthy()) {
             logger.debug("Skipping checkUpdate: MockController is not healthy");
             return;
         }
@@ -645,21 +638,11 @@ public class ConfigAggregator {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
-        performHealthCheck();
-        if (isMockControllerHealthy) {
+        // Ждем первую проверку healthcheck (выполняется каждую минуту)
+        // Если MockController здоров, выполняем checkUpdate
+        if (healthcheckSender == null || healthcheckSender.isMockControllerHealthy()) {
             checkUpdate();
         }
-    }
-    
-    /**
-     * Периодически проверяет healthcheck MockController.
-     */
-    @Scheduled(fixedDelayString = "${mock-controller.healthcheck-interval-seconds:10}000")
-    public void scheduledHealthCheck() {
-        lastHealthcheckTime = System.currentTimeMillis();
-        healthcheckCount++;
-        logger.info("Scheduled healthcheck #{} triggered at {}", healthcheckCount, new java.util.Date(lastHealthcheckTime));
-        performHealthCheck();
     }
     
     /**
@@ -668,7 +651,7 @@ public class ConfigAggregator {
     @Scheduled(fixedDelayString = "${mock-controller.check-interval-seconds:5}000")
     public void scheduledCheckUpdate() {
         // Не выполняем checkUpdate если MockController не здоров
-        if (!isMockControllerHealthy) {
+        if (healthcheckSender != null && !healthcheckSender.isMockControllerHealthy()) {
             logger.debug("Skipping scheduled checkUpdate: MockController is not healthy");
             return;
         }
@@ -679,64 +662,6 @@ public class ConfigAggregator {
         checkUpdate();
     }
     
-    /**
-     * Выполняет healthcheck MockController.
-     * Если ответ не 200 или занимает больше таймаута, считаем MockController нездоровым.
-     */
-    public void performHealthCheck() {
-        try {
-            if (mockControllerConfig == null) {
-                logger.warn("MockController config not initialized, skipping healthcheck");
-                isMockControllerHealthy = false;
-                return;
-            }
-            
-            if (healthcheckRestTemplate == null) {
-                initializeRestTemplates();
-            }
-            
-            if (healthcheckRestTemplate == null) {
-                logger.error("Failed to initialize healthcheckRestTemplate, marking as unhealthy");
-                isMockControllerHealthy = false;
-                return;
-            }
-            
-            String healthcheckUrl = mockControllerConfig.getUrl() + mockControllerConfig.getHealthcheckPath();
-            logger.debug("Performing healthcheck at: {}", healthcheckUrl);
-            
-            long startTime = System.currentTimeMillis();
-            ResponseEntity<String> response = healthcheckRestTemplate.exchange(
-                healthcheckUrl,
-                HttpMethod.GET,
-                null,
-                String.class
-            );
-            long duration = System.currentTimeMillis() - startTime;
-            
-            // Проверяем статус 200
-            int statusCode = response.getStatusCode().value();
-            if (statusCode == 200) {
-                isMockControllerHealthy = true;
-                healthcheckFailureCount = 0;
-                logger.debug("Healthcheck successful: status=200, duration={}ms", duration);
-            } else {
-                isMockControllerHealthy = false;
-                healthcheckFailureCount++;
-                logger.warn("Healthcheck failed: status={}, duration={}ms (failure #{})", 
-                    statusCode, duration, healthcheckFailureCount);
-            }
-            
-        } catch (RestClientException e) {
-            isMockControllerHealthy = false;
-            healthcheckFailureCount++;
-            logger.warn("Healthcheck failed: {} (failure #{})", e.getMessage(), healthcheckFailureCount);
-        } catch (Exception e) {
-            isMockControllerHealthy = false;
-            healthcheckFailureCount++;
-            logger.error("Unexpected error during healthcheck (failure #{}): {}", 
-                healthcheckFailureCount, e.getMessage(), e);
-        }
-    }
     
     /**
      * Возвращает информацию о последней проверке конфигурации.
@@ -755,15 +680,26 @@ public class ConfigAggregator {
         status.put("servicesCount", getAllConfigurableServices().size());
         status.put("isMockControllerAvailable", errorCount == 0 || (timeSinceLastCheck >= 0 && timeSinceLastCheck < 10));
         
-        // Healthcheck информация
-        status.put("isMockControllerHealthy", isMockControllerHealthy);
-        status.put("lastHealthcheckTime", lastHealthcheckTime > 0 ? new java.util.Date(lastHealthcheckTime).toString() : "Never");
-        status.put("healthcheckCount", healthcheckCount);
-        status.put("healthcheckFailureCount", healthcheckFailureCount);
-        status.put("healthcheckPath", mockControllerConfig != null ? mockControllerConfig.getHealthcheckPath() : "/service/healthcheck");
-        status.put("healthcheckIntervalSeconds", mockControllerConfig != null ? mockControllerConfig.getHealthcheckIntervalSeconds() : 10);
-        long timeSinceLastHealthcheck = lastHealthcheckTime > 0 ? (System.currentTimeMillis() - lastHealthcheckTime) / 1000 : -1;
-        status.put("secondsSinceLastHealthcheck", timeSinceLastHealthcheck);
+        // Healthcheck информация из HealthcheckSender
+        if (healthcheckSender != null) {
+            HealthcheckSender.HealthcheckInfo healthcheckInfo = healthcheckSender.getHealthcheckInfo();
+            status.put("isMockControllerHealthy", healthcheckInfo.isHealthy);
+            status.put("lastHealthcheckTime", healthcheckInfo.lastHealthcheckTime > 0 ? new java.util.Date(healthcheckInfo.lastHealthcheckTime).toString() : "Never");
+            status.put("healthcheckCount", healthcheckInfo.healthcheckCount);
+            status.put("healthcheckFailureCount", healthcheckInfo.healthcheckFailureCount);
+            status.put("healthcheckPath", "/api/healthcheck");
+            status.put("healthcheckIntervalSeconds", 60); // Каждую минуту
+            long timeSinceLastHealthcheck = healthcheckInfo.lastHealthcheckTime > 0 ? (System.currentTimeMillis() - healthcheckInfo.lastHealthcheckTime) / 1000 : -1;
+            status.put("secondsSinceLastHealthcheck", timeSinceLastHealthcheck);
+        } else {
+            status.put("isMockControllerHealthy", false);
+            status.put("lastHealthcheckTime", "HealthcheckSender not initialized");
+            status.put("healthcheckCount", 0);
+            status.put("healthcheckFailureCount", 0);
+            status.put("healthcheckPath", "/api/healthcheck");
+            status.put("healthcheckIntervalSeconds", 60);
+            status.put("secondsSinceLastHealthcheck", -1);
+        }
         
         return status;
     }
