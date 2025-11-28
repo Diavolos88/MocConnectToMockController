@@ -203,6 +203,11 @@ spring:
 mock-controller:
   url: http://localhost:8080              # URL MockController
   check-interval-seconds: 5                # Интервал проверки обновлений
+  healthcheck-path: /service/healthcheck  # Путь для healthcheck
+  healthcheck-timeout-seconds: 5          # Таймаут для healthcheck
+  healthcheck-interval-seconds: 10         # Интервал проверки healthcheck
+  connect-timeout-seconds: 10             # Таймаут подключения
+  read-timeout-seconds: 10                # Таймаут чтения ответа
 
 # Логирование
 logging:
@@ -218,24 +223,41 @@ logging:
 - **`spring.application.name`**: Используется как идентификатор заглушки в MockController
 - **`mock-controller.url`**: Адрес вашего MockController сервера
 - **`mock-controller.check-interval-seconds`**: Как часто проверять обновления (в секундах)
+- **`mock-controller.healthcheck-path`**: Путь для healthcheck (по умолчанию `/service/healthcheck`)
+- **`mock-controller.healthcheck-timeout-seconds`**: Таймаут для healthcheck (по умолчанию 5 секунд)
+- **`mock-controller.healthcheck-interval-seconds`**: Интервал проверки healthcheck (по умолчанию 10 секунд)
+- **`mock-controller.connect-timeout-seconds`**: Таймаут подключения (по умолчанию 10 секунд)
+- **`mock-controller.read-timeout-seconds`**: Таймаут чтения ответа (по умолчанию 10 секунд)
 - **`logging.level.{package}`**: Пакет, для которого будет управляться уровень логирования
 
 ## Работа с MockController
+
+### Healthcheck
+
+Библиотека автоматически проверяет доступность MockController через healthcheck:
+- Healthcheck выполняется каждые 10 секунд (настраивается через `healthcheck-interval-seconds`)
+- Если healthcheck возвращает статус 200 в течение таймаута (5 секунд по умолчанию), MockController считается здоровым
+- Если healthcheck не проходит (статус != 200 или таймаут), все запросы к MockController останавливаются, кроме самого healthcheck
+- Healthcheck продолжает выполняться, и когда MockController снова станет доступен, запросы возобновятся
 
 ### Процесс синхронизации
 
 1. **При старте приложения:**
    ```
-   Заглушка → Извлечение конфигурации → POST /api/configs/checkUpdate
-   MockController → Ответ: needUpdate=true/false, currentVersion=vX
-   Если needUpdate=true → GET /api/configs/{systemName}?version={version}
-   Заглушка → Применение конфигурации
+   Заглушка → Healthcheck MockController
+   Если MockController здоров:
+     → Извлечение конфигурации → POST /api/configs/checkUpdate
+     → MockController → Ответ: needUpdate=true/false, currentVersion=vX
+     → Если needUpdate=true → GET /api/configs/{systemName}?version={version}
+     → Применение конфигурации
    ```
 
 2. **Периодическая проверка:**
    ```
-   Каждые N секунд → POST /api/configs/checkUpdate
-   Если needUpdate=true → Загрузка и применение нового конфига
+   Каждые 10 секунд → Healthcheck MockController
+   Если MockController здоров:
+     Каждые N секунд → POST /api/configs/checkUpdate
+     Если needUpdate=true → Загрузка и применение нового конфига
    ```
 
 ### Формат конфигурации
