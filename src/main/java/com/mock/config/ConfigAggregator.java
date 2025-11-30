@@ -134,6 +134,17 @@ public class ConfigAggregator {
         logger.debug("Aggregated config: delays={}, intParams={}, stringParams={}, booleanVariables={}", 
             delays.size(), intParams.size(), stringParams.size(), booleanVariables.size());
         
+        // Логируем полный конфиг для отладки
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            String configJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(config);
+            logger.info("=== Full aggregated config being sent to MockController ===\n{}", configJson);
+        } catch (Exception e) {
+            logger.warn("Failed to serialize config to JSON: {}", e.getMessage());
+            logger.info("Config summary: delays={}, intParams={}, stringParams={}, booleanVariables={}, loggingLv={}", 
+                delays.size(), intParams.size(), stringParams.size(), booleanVariables.size(), loggingConfig.getLoggingLevel());
+        }
+        
         return config;
     }
     
@@ -572,6 +583,18 @@ public class ConfigAggregator {
             ConfigResponse configResponse = response.getBody();
             
             if (configResponse != null && configResponse.getConfig() != null) {
+                // Логируем полный конфиг, полученный от MockController
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String configJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(configResponse.getConfig());
+                    logger.info("=== Full config received from MockController (version: {}) ===\n{}", 
+                        configResponse.getVersion(), configJson);
+                } catch (Exception e) {
+                    logger.warn("Failed to serialize received config to JSON: {}", e.getMessage());
+                    logger.info("Received config summary: version={}, config keys={}", 
+                        configResponse.getVersion(), configResponse.getConfig().keySet());
+                }
+                
                 applyConfigToAllServices(configResponse.getConfig());
                 
                 // Обновляем уровень логирования
@@ -597,12 +620,13 @@ public class ConfigAggregator {
     
     /**
      * Применяет уровень логирования.
+     * Устанавливает уровень для всех пакетов com.mock.*, включая вложенные,
+     * чтобы переопределить настройки из application.yml.
      */
     private void applyLoggingLevel(String levelStr) {
         try {
             ch.qos.logback.classic.LoggerContext loggerContext = 
                 (ch.qos.logback.classic.LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
-            ch.qos.logback.classic.Logger rootLogger = loggerContext.getLogger("com.mock");
             
             ch.qos.logback.classic.Level level;
             switch (levelStr.toUpperCase()) {
@@ -627,9 +651,40 @@ public class ConfigAggregator {
                     break;
             }
             
-            rootLogger.setLevel(level);
+            // Получаем все существующие логгеры и устанавливаем уровень для всех com.mock.*
+            java.util.List<ch.qos.logback.classic.Logger> loggers = loggerContext.getLoggerList();
+            int updatedCount = 0;
+            
+            for (ch.qos.logback.classic.Logger log : loggers) {
+                String loggerName = log.getName();
+                if (loggerName != null && loggerName.startsWith("com.mock")) {
+                    log.setLevel(level);
+                    updatedCount++;
+                }
+            }
+            
+            // Также устанавливаем уровень для основных пакетов (даже если они еще не созданы)
+            // Это гарантирует, что все новые логгеры будут использовать этот уровень
+            String[] packageNames = {
+                "com.mock",
+                "com.mock.config",
+                "com.mock.service",
+                "com.mock.controller"
+            };
+            
+            for (String packageName : packageNames) {
+                ch.qos.logback.classic.Logger pkgLogger = loggerContext.getLogger(packageName);
+                if (pkgLogger != null) {
+                    pkgLogger.setLevel(level);
+                }
+            }
+            
+            // Логируем изменение уровня (используем System.out, чтобы это сообщение точно было видно)
+            System.out.println("=== Logging level changed to " + levelStr + " for " + updatedCount + " com.mock.* loggers ===");
         } catch (Exception e) {
-            logger.error("Error setting logging level: {}", e.getMessage(), e);
+            // Используем System.err для ошибки, чтобы она точно была видна
+            System.err.println("Error setting logging level: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     

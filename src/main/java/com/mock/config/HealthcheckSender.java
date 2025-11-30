@@ -27,6 +27,8 @@ public class HealthcheckSender {
     @Value("${spring.application.name}")
     private String systemName;
     
+    private static final String instanceId = String.valueOf(System.nanoTime());
+
     private final RestTemplate restTemplate;
     private volatile boolean isMockControllerHealthy = true; // По умолчанию считаем здоровым
     private volatile long lastHealthcheckTime = 0;
@@ -44,7 +46,7 @@ public class HealthcheckSender {
     @Scheduled(fixedRate = 60000) // Каждую минуту
     public void sendHealthcheck() {
         try {
-            String instanceId = InetAddress.getLocalHost().getHostName();
+            // Определяем instanceId один раз при запуске
             String url = mockControllerUrl + "/api/healthcheck" 
                 + "?systemName=" + systemName 
                 + "&instanceId=" + instanceId;
