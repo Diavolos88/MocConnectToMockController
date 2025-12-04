@@ -620,8 +620,10 @@ public class ConfigAggregator {
     
     /**
      * Применяет уровень логирования.
-     * Устанавливает уровень для всех пакетов com.mock.*, включая вложенные,
-     * чтобы переопределить настройки из application.yml.
+     * Устанавливает уровень для:
+     * 1. Root логгера (если он настроен в application.yml через logging.level.root)
+     * 2. Всех пакетов com.mock.*, включая вложенные,
+     *    чтобы переопределить настройки из application.yml.
      */
     private void applyLoggingLevel(String levelStr) {
         try {
@@ -651,19 +653,30 @@ public class ConfigAggregator {
                     break;
             }
             
-            // Получаем все существующие логгеры и устанавливаем уровень для всех com.mock.*
-            java.util.List<ch.qos.logback.classic.Logger> loggers = loggerContext.getLoggerList();
             int updatedCount = 0;
+            
+            // 1. Устанавливаем уровень для root логгера (если он существует)
+            // Это важно для случаев, когда в application.yml настроен logging.level.root
+            ch.qos.logback.classic.Logger rootLogger = loggerContext.getLogger(ch.qos.logback.classic.Logger.ROOT_LOGGER_NAME);
+            if (rootLogger != null) {
+                rootLogger.setLevel(level);
+                updatedCount++;
+                logger.debug("Set logging level for ROOT logger to: {}", levelStr);
+            }
+            
+            // 2. Получаем все существующие логгеры и устанавливаем уровень для всех com.mock.*
+            java.util.List<ch.qos.logback.classic.Logger> loggers = loggerContext.getLoggerList();
             
             for (ch.qos.logback.classic.Logger log : loggers) {
                 String loggerName = log.getName();
                 if (loggerName != null && loggerName.startsWith("com.mock")) {
                     log.setLevel(level);
+                    log.setAdditive(false); // Отключаем наследование, чтобы наш уровень точно применялся
                     updatedCount++;
                 }
             }
             
-            // Также устанавливаем уровень для основных пакетов (даже если они еще не созданы)
+            // 3. Также устанавливаем уровень для основных пакетов (даже если они еще не созданы)
             // Это гарантирует, что все новые логгеры будут использовать этот уровень
             String[] packageNames = {
                 "com.mock",
@@ -676,11 +689,12 @@ public class ConfigAggregator {
                 ch.qos.logback.classic.Logger pkgLogger = loggerContext.getLogger(packageName);
                 if (pkgLogger != null) {
                     pkgLogger.setLevel(level);
+                    pkgLogger.setAdditive(false); // Отключаем наследование
                 }
             }
             
             // Логируем изменение уровня (используем System.out, чтобы это сообщение точно было видно)
-            System.out.println("=== Logging level changed to " + levelStr + " for " + updatedCount + " com.mock.* loggers ===");
+            System.out.println("=== Logging level changed to " + levelStr + " for ROOT logger and " + updatedCount + " com.mock.* loggers ===");
         } catch (Exception e) {
             // Используем System.err для ошибки, чтобы она точно была видна
             System.err.println("Error setting logging level: " + e.getMessage());
@@ -693,6 +707,13 @@ public class ConfigAggregator {
      */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
+        // Применяем начальный уровень логирования из application.yml
+        if (loggingConfig != null && loggingConfig.getLoggingLevel() != null) {
+            String initialLevel = loggingConfig.getLoggingLevel();
+            logger.info("Applying initial logging level from application.yml: {}", initialLevel);
+            applyLoggingLevel(initialLevel);
+        }
+        
         // Ждем первую проверку healthcheck (выполняется каждую минуту)
         // Если MockController здоров, выполняем checkUpdate
         if (healthcheckSender == null || healthcheckSender.isMockControllerHealthy()) {
